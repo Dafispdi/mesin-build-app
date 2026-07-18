@@ -128,7 +128,7 @@ jobs:
       - name: Build Kotlin APK
         if: ${{ inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
-        run: ./gradlew assembleRelease -Djava.awt.headless=true --no-daemon
+        run: ./gradlew assembleDebug -Djava.awt.headless=true --no-daemon
 
       # --- OUTPUT: AMBIL HASIL APK ---
       - name: Simpan Hasil APK Flutter
@@ -144,5 +144,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hasil-Build-Kotlin
-          path: target_repo/app/build/outputs/apk/release/*.apk
+          # GANTI JADI BEGINI:
+          path: target_repo/app/build/outputs/apk/debug/*.apk
           retention-days: 5
