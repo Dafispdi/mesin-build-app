@@ -48,13 +48,28 @@ jobs:
           flutter pub get
           flutter build apk --release
 
-      # --- BLOK KHUSUS KOTLIN ---
-      - name: Build Kotlin APK
+     # --- BLOK KHUSUS KOTLIN ---
+      - name: Pengecekan & Auto-Fix Gradle Wrapper
         if: ${{ inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
         run: |
+          # Cek apakah file gradlew TIDAK ada
+          if [ ! -f "./gradlew" ]; then
+            echo "⚠️ File gradlew tidak ditemukan di repository!"
+            echo "🔧 Meng-generate ulang Gradle Wrapper secara otomatis..."
+            # Memanggil mesin Gradle global milik Ubuntu untuk membuatkan file wrapper
+            gradle wrapper
+          else
+            echo "✅ File gradlew ditemukan."
+          fi
+          
+          # Pastikan file bisa dieksekusi
           chmod +x ./gradlew
-          ./gradlew assembleRelease
+
+      - name: Build Kotlin APK
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: ./gradlew assembleRelease
 
       # --- OUTPUT: AMBIL HASIL APK ---
       - name: Simpan Hasil APK Flutter
