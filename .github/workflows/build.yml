@@ -27,6 +27,43 @@ jobs:
       - name: Download (Clone) Source Code
         run: git clone ${{ inputs.repo_url }} target_repo
 
+      - name: Pengecekan Integritas & Auto-Fix File
+        working-directory: ./target_repo
+        run: |
+          echo "🔍 Memulai pengecekan struktur repository..."
+
+          # --- CEK UNTUK KOTLIN ---
+          if [ "${{ inputs.framework }}" == "kotlin" ]; then
+            # 1. Cek Fatal Error: Apakah build.gradle ada?
+            if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+              echo "❌ ERROR: Repository tidak valid. File build.gradle(.kts) utama tidak ditemukan!"
+              exit 1 # Membatalkan build seketika (Status Failed)
+            fi
+
+            if [ ! -f "app/build.gradle" ] && [ ! -f "app/build.gradle.kts" ]; then
+              echo "❌ ERROR: File app/build.gradle(.kts) tidak ditemukan!"
+              exit 1
+            fi
+
+            # 2. Auto-Fix: Buat local.properties jika hilang (Sering bikin error di Android)
+            if [ ! -f "local.properties" ]; then
+              echo "🔧 Memperbaiki: Membuat file local.properties otomatis..."
+              echo "sdk.dir=$ANDROID_HOME" > local.properties
+            fi
+          fi
+
+          # --- CEK UNTUK FLUTTER ---
+          if [ "${{ inputs.framework }}" == "flutter" ]; then
+            # 1. Cek Fatal Error: Apakah pubspec.yaml ada?
+            if [ ! -f "pubspec.yaml" ]; then
+              echo "❌ ERROR: Repository bukan project Flutter. File pubspec.yaml tidak ditemukan!"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Pengecekan selesai. Struktur aman!"
+
+
       - name: Install Java 17
         uses: actions/setup-java@v3
         with:
