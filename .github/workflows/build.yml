@@ -1,0 +1,74 @@
+name: Mesin Build (Flutter & Kotlin)
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Link Repository App yang mau dibuild'
+        required: true
+        type: string
+      framework:
+        description: 'Pilih: flutter atau kotlin'
+        required: true
+        type: choice
+        options:
+          - flutter
+          - kotlin
+
+jobs:
+  build-app:
+    name: Proses Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Hapus sisa file lama
+        run: rm -rf target_repo
+
+      - name: Download (Clone) Source Code
+        run: git clone ${{ inputs.repo_url }} target_repo
+
+      - name: Install Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # --- BLOK KHUSUS FLUTTER ---
+      - name: Install Mesin Flutter
+        if: ${{ inputs.framework == 'flutter' }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+
+      - name: Build Flutter APK
+        if: ${{ inputs.framework == 'flutter' }}
+        working-directory: ./target_repo
+        run: |
+          flutter pub get
+          flutter build apk --release
+
+      # --- BLOK KHUSUS KOTLIN ---
+      - name: Build Kotlin APK
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+
+      # --- OUTPUT: AMBIL HASIL APK ---
+      - name: Simpan Hasil APK Flutter
+        if: ${{ success() && inputs.framework == 'flutter' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Build-Flutter
+          path: target_repo/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 5
+
+      - name: Simpan Hasil APK Kotlin
+        if: ${{ success() && inputs.framework == 'kotlin' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Build-Kotlin
+          path: target_repo/app/build/outputs/apk/release/*.apk
+          retention-days: 5
