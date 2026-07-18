@@ -22,11 +22,22 @@ jobs:
 
     steps:
       - name: Hapus sisa file lama
-        run: rm -rf target_repo
+        run: rm -rf target_repo source.zip
 
-      - name: Download (Clone) Source Code
-        run: git clone ${{ inputs.repo_url }} target_repo
+      - name: Buat Folder Target
+        run: mkdir target_repo
 
+      # INI YANG BERUBAH: Download ZIP dan Ekstrak, bukan Git Clone
+      - name: Download & Extract File ZIP
+        run: |
+          echo "📥 Mendownload file ZIP dari website lu..."
+          wget -q -O source.zip "${{ inputs.zip_url }}"
+          
+          echo "📦 Mengekstrak file ZIP..."
+          unzip -q source.zip -d target_repo/
+          
+          # Hapus file zip mentahan biar hemat tempat
+          rm source.zip
       - name: Pengecekan Integritas & Auto-Fix File
         working-directory: ./target_repo
         run: |
