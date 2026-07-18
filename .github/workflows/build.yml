@@ -125,6 +125,14 @@ jobs:
           # Pastikan file bisa dieksekusi
           chmod +x ./gradlew
 
+      - name: Auto-Generate Debug Keystore
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🔑 Membuat file debug.keystore dadakan..."
+          keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "✅ Keystore berhasil dibuat!"
+
       - name: Build Kotlin APK
         if: ${{ inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
