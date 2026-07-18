@@ -3,8 +3,9 @@ name: Mesin Build (Flutter & Kotlin)
 on:
   workflow_dispatch:
     inputs:
-      repo_url:
-        description: 'Link Repository App yang mau dibuild'
+      # UBAH BAGIAN INI DARI repo_url MENJADI zip_url
+      zip_url:
+        description: 'Link Direct Download ZIP Source Code'
         required: true
         type: string
       framework:
@@ -35,6 +36,15 @@ jobs:
           
           echo "📦 Mengekstrak file ZIP..."
           unzip -q source.zip -d target_repo/
+          
+          # Trik agar isi folder (jika ada sub-folder hasil ekstrak) ditarik ke depan
+          cd target_repo
+          # Cek kalau di dalamnya cuma ada 1 folder, pindahkan isinya keluar
+          if [ $(ls -1A | wc -l) -eq 1 ] && [ -d $(ls -1A) ]; then
+            mv $(ls -1A)/* ./
+            mv $(ls -1A)/.* ./ 2>/dev/null || true
+          fi
+          cd ..
           
           # Hapus file zip mentahan biar hemat tempat
           rm source.zip
