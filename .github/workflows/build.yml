@@ -128,7 +128,7 @@ jobs:
       - name: Build Kotlin APK
         if: ${{ inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -Djava.awt.headless=true --no-daemon
 
       # --- OUTPUT: AMBIL HASIL APK ---
       - name: Simpan Hasil APK Flutter
