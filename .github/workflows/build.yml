@@ -172,7 +172,7 @@ jobs:
         if: ${{ success() && inputs.framework == 'flutter' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Hasil-Build-Flutter
+          name: Hasil-Build
           path: target_repo/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5
 
@@ -180,7 +180,6 @@ jobs:
         if: ${{ success() && inputs.framework == 'kotlin' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Hasil-Build-Kotlin
-          # GANTI JADI BEGINI:
+          name: Hasil-Build
           path: target_repo/app/build/outputs/apk/debug/*.apk
           retention-days: 5
