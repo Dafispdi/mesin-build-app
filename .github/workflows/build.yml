@@ -15,6 +15,10 @@ on:
         options:
           - flutter
           - kotlin
+      icon_url:
+        description: 'URL Custom Icon (Opsional)'
+        required: false
+        type: string
 
 jobs:
   build-app:
@@ -27,6 +31,31 @@ jobs:
 
       - name: Buat Folder Target
         run: mkdir target_repo
+
+      - name: Pasang Custom Icon
+        if: ${{ inputs.icon_url != '' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🎨 Mendownload custom icon..."
+          wget -q -O custom_icon.png "${{ inputs.icon_url }}"
+          
+          echo "⚙️ Memproses dan menimpa icon bawaan..."
+          # Tentukan target folder res/mipmap berdasarkan framework
+          if [ "${{ inputs.framework }}" == "kotlin" ]; then
+            RES_DIR="app/src/main/res"
+          else
+            RES_DIR="android/app/src/main/res"
+          fi
+          
+          # Timpa semua ukuran icon dengan custom icon (resize otomatis jadi 192x192)
+          for dir in $RES_DIR/mipmap-*/; do
+            if [ -d "$dir" ]; then
+              # Gunakan ImageMagick (convert) untuk me-resize dan overwrite
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png" 2>/dev/null || true
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png" 2>/dev/null || true
+            fi
+          done
+          echo "✅ Custom Icon berhasil dipasang!"
 
       # INI YANG BERUBAH: Download ZIP dan Ekstrak, bukan Git Clone
       - name: Download & Extract File ZIP
