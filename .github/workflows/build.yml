@@ -38,6 +38,7 @@ jobs:
           
           # Hapus file zip mentahan biar hemat tempat
           rm source.zip
+          
       - name: Pengecekan Integritas & Auto-Fix File
         working-directory: ./target_repo
         run: |
