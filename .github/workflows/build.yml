@@ -73,6 +73,15 @@ jobs:
           echo "🔍 Mengecek folder mipmap yang tersedia di $RES_DIR ..."
           ls -d $RES_DIR/mipmap-*/ 2>/dev/null || echo "⚠️ Tidak ada folder mipmap-* ditemukan!"
 
+          # PENTING: Android 8+ pakai "adaptive icon" (mipmap-anydpi-v26/ic_launcher.xml)
+          # yang me-reference vector drawable, BUKAN file PNG. Kalau folder ini dibiarkan,
+          # PNG custom yang kita timpa di bawah tidak akan pernah dipakai sistem.
+          # Solusinya: hapus definisi adaptive icon-nya, biar sistem fallback ke PNG legacy.
+          if [ -d "$RES_DIR/mipmap-anydpi-v26" ]; then
+            echo "🗑️ Menghapus adaptive icon (mipmap-anydpi-v26) supaya PNG custom kepakai..."
+            rm -rf "$RES_DIR/mipmap-anydpi-v26"
+          fi
+
           # Timpa semua ukuran icon dengan custom icon (resize otomatis jadi 192x192)
           for dir in $RES_DIR/mipmap-*/; do
             if [ -d "$dir" ]; then
@@ -81,6 +90,16 @@ jobs:
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png" 2>/dev/null || true
             fi
           done
+
+          # Kalau ternyata TIDAK ADA folder mipmap-* sama sekali (kasus jarang),
+          # buat folder mipmap-xxhdpi manual biar tetap ada icon-nya
+          if ! ls -d $RES_DIR/mipmap-*/ >/dev/null 2>&1; then
+            echo "⚠️ Tidak ada folder mipmap sama sekali, membuat mipmap-xxhdpi manual..."
+            mkdir -p "$RES_DIR/mipmap-xxhdpi"
+            convert custom_icon.png -resize 192x192 "$RES_DIR/mipmap-xxhdpi/ic_launcher.png" 2>/dev/null || true
+            convert custom_icon.png -resize 192x192 "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png" 2>/dev/null || true
+          fi
+
           echo "✅ Custom Icon berhasil dipasang!"
           
       - name: Pengecekan Integritas & Auto-Fix File
