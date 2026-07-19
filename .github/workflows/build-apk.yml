@@ -1,0 +1,209 @@
+name: Mesin Build (Flutter & Kotlin)
+
+on:
+  workflow_dispatch:
+    inputs:
+      # UBAH BAGIAN INI DARI repo_url MENJADI zip_url
+      zip_url:
+        description: 'Link Direct Download ZIP Source Code'
+        required: true
+        type: string
+      framework:
+        description: 'Pilih: flutter atau kotlin'
+        required: true
+        type: choice
+        options:
+          - flutter
+          - kotlin
+      icon_url:
+        description: 'URL Custom Icon (Opsional)'
+        required: false
+        type: string
+
+jobs:
+  build-app:
+    name: Proses Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Hapus sisa file lama
+        run: rm -rf target_repo source.zip
+
+      - name: Buat Folder Target
+        run: mkdir target_repo
+
+      # INI YANG BERUBAH: Download ZIP dan Ekstrak, bukan Git Clone
+      - name: Download & Extract File ZIP
+        run: |
+          echo "📥 Mendownload file ZIP dari website lu..."
+          wget -q -O source.zip "${{ inputs.zip_url }}"
+          
+          echo "📦 Mengekstrak file ZIP..."
+          unzip -q source.zip -d target_repo/
+          
+          # Trik agar isi folder (jika ada sub-folder hasil ekstrak) ditarik ke depan
+          cd target_repo
+          # Cek kalau di dalamnya cuma ada 1 folder, pindahkan isinya keluar
+          if [ $(ls -1A | wc -l) -eq 1 ] && [ -d $(ls -1A) ]; then
+            mv $(ls -1A)/* ./
+            mv $(ls -1A)/.* ./ 2>/dev/null || true
+          fi
+          cd ..
+          
+          # Hapus file zip mentahan biar hemat tempat
+          rm source.zip
+
+      # DIPINDAH KE SINI: harus setelah source code diekstrak,
+      # biar folder res/mipmap-* sudah ada dan bisa ditimpa iconnya
+      - name: Pasang Custom Icon
+        if: ${{ inputs.icon_url != '' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🎨 Mendownload custom icon..."
+          wget -q -O custom_icon.png "${{ inputs.icon_url }}"
+          
+          echo "⚙️ Memproses dan menimpa icon bawaan..."
+          # Tentukan target folder res/mipmap berdasarkan framework
+          if [ "${{ inputs.framework }}" == "kotlin" ]; then
+            RES_DIR="app/src/main/res"
+          else
+            RES_DIR="android/app/src/main/res"
+          fi
+
+          echo "🔍 Mengecek folder mipmap yang tersedia di $RES_DIR ..."
+          ls -d $RES_DIR/mipmap-*/ 2>/dev/null || echo "⚠️ Tidak ada folder mipmap-* ditemukan!"
+
+          # PENTING: Android 8+ pakai "adaptive icon" (mipmap-anydpi-v26/ic_launcher.xml)
+          # yang me-reference vector drawable, BUKAN file PNG. Kalau folder ini dibiarkan,
+          # PNG custom yang kita timpa di bawah tidak akan pernah dipakai sistem.
+          # Solusinya: hapus definisi adaptive icon-nya, biar sistem fallback ke PNG legacy.
+          if [ -d "$RES_DIR/mipmap-anydpi-v26" ]; then
+            echo "🗑️ Menghapus adaptive icon (mipmap-anydpi-v26) supaya PNG custom kepakai..."
+            rm -rf "$RES_DIR/mipmap-anydpi-v26"
+          fi
+
+          # Timpa semua ukuran icon dengan custom icon (resize otomatis jadi 192x192)
+          for dir in $RES_DIR/mipmap-*/; do
+            if [ -d "$dir" ]; then
+              # Gunakan ImageMagick (convert) untuk me-resize dan overwrite
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png" 2>/dev/null || true
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png" 2>/dev/null || true
+            fi
+          done
+
+          # Kalau ternyata TIDAK ADA folder mipmap-* sama sekali (kasus jarang),
+          # buat folder mipmap-xxhdpi manual biar tetap ada icon-nya
+          if ! ls -d $RES_DIR/mipmap-*/ >/dev/null 2>&1; then
+            echo "⚠️ Tidak ada folder mipmap sama sekali, membuat mipmap-xxhdpi manual..."
+            mkdir -p "$RES_DIR/mipmap-xxhdpi"
+            convert custom_icon.png -resize 192x192 "$RES_DIR/mipmap-xxhdpi/ic_launcher.png" 2>/dev/null || true
+            convert custom_icon.png -resize 192x192 "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png" 2>/dev/null || true
+          fi
+
+          echo "✅ Custom Icon berhasil dipasang!"
+          
+      - name: Pengecekan Integritas & Auto-Fix File
+        working-directory: ./target_repo
+        run: |
+          echo "🔍 Memulai pengecekan struktur repository..."
+
+          # --- CEK UNTUK KOTLIN ---
+          if [ "${{ inputs.framework }}" == "kotlin" ]; then
+            # 1. Cek Fatal Error: Apakah build.gradle ada?
+            if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+              echo "❌ ERROR: Repository tidak valid. File build.gradle(.kts) utama tidak ditemukan!"
+              exit 1 # Membatalkan build seketika (Status Failed)
+            fi
+
+            if [ ! -f "app/build.gradle" ] && [ ! -f "app/build.gradle.kts" ]; then
+              echo "❌ ERROR: File app/build.gradle(.kts) tidak ditemukan!"
+              exit 1
+            fi
+
+            # 2. Auto-Fix: Buat local.properties jika hilang (Sering bikin error di Android)
+            if [ ! -f "local.properties" ]; then
+              echo "🔧 Memperbaiki: Membuat file local.properties otomatis..."
+              echo "sdk.dir=$ANDROID_HOME" > local.properties
+            fi
+          fi
+
+          # --- CEK UNTUK FLUTTER ---
+          if [ "${{ inputs.framework }}" == "flutter" ]; then
+            # 1. Cek Fatal Error: Apakah pubspec.yaml ada?
+            if [ ! -f "pubspec.yaml" ]; then
+              echo "❌ ERROR: Repository bukan project Flutter. File pubspec.yaml tidak ditemukan!"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Pengecekan selesai. Struktur aman!"
+
+
+      - name: Install Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # --- BLOK KHUSUS FLUTTER ---
+      - name: Install Mesin Flutter
+        if: ${{ inputs.framework == 'flutter' }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+
+      - name: Build Flutter APK
+        if: ${{ inputs.framework == 'flutter' }}
+        working-directory: ./target_repo
+        run: |
+          flutter pub get
+          flutter build apk --release
+
+     # --- BLOK KHUSUS KOTLIN ---
+      - name: Pengecekan & Auto-Fix Gradle Wrapper
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: |
+          # Cek apakah file gradlew TIDAK ada
+          if [ ! -f "./gradlew" ]; then
+            echo "⚠️ File gradlew tidak ditemukan di repository!"
+            echo "🔧 Meng-generate ulang Gradle Wrapper secara otomatis..."
+            # Memanggil mesin Gradle global milik Ubuntu untuk membuatkan file wrapper
+            gradle wrapper
+          else
+            echo "✅ File gradlew ditemukan."
+          fi
+          
+          # Pastikan file bisa dieksekusi
+          chmod +x ./gradlew
+
+      - name: Auto-Generate Debug Keystore
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🔑 Membuat file debug.keystore dadakan..."
+          keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "✅ Keystore berhasil dibuat!"
+
+      - name: Build Kotlin APK
+        if: ${{ inputs.framework == 'kotlin' }}
+        working-directory: ./target_repo
+        run: ./gradlew assembleDebug -Djava.awt.headless=true --no-daemon
+
+      # --- OUTPUT: AMBIL HASIL APK ---
+      - name: Simpan Hasil APK Flutter
+        if: ${{ success() && inputs.framework == 'flutter' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Build
+          path: target_repo/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 5
+
+      - name: Simpan Hasil APK Kotlin
+        if: ${{ success() && inputs.framework == 'kotlin' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Build
+          path: target_repo/app/build/outputs/apk/debug/*.apk
+          retention-days: 5
