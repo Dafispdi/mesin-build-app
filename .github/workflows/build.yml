@@ -61,7 +61,15 @@ jobs:
         run: |
           echo "🎨 Mendownload custom icon..."
           wget -q -O custom_icon.png "${{ inputs.icon_url }}"
-          
+
+          echo "🔍 Cek hasil download icon:"
+          ls -la custom_icon.png
+          file custom_icon.png
+
+          echo "🔍 Cek ImageMagick tersedia:"
+          which convert || echo "❌ convert TIDAK ditemukan di runner!"
+          convert -version || true
+
           echo "⚙️ Memproses dan menimpa icon bawaan..."
           # Tentukan target folder res/mipmap berdasarkan framework
           if [ "${{ inputs.framework }}" == "kotlin" ]; then
@@ -85,9 +93,11 @@ jobs:
           # Timpa semua ukuran icon dengan custom icon (resize otomatis jadi 192x192)
           for dir in $RES_DIR/mipmap-*/; do
             if [ -d "$dir" ]; then
-              # Gunakan ImageMagick (convert) untuk me-resize dan overwrite
-              convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png" 2>/dev/null || true
-              convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png" 2>/dev/null || true
+              echo "➡️ Menimpa icon di: $dir"
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png"
+              convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png"
+              echo "   Hasil ic_launcher.png:"
+              ls -la "${dir}ic_launcher.png"
             fi
           done
 
