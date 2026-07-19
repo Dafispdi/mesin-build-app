@@ -66,6 +66,10 @@ jobs:
           ls -la custom_icon.png
           file custom_icon.png
 
+          echo "📦 Menginstall ImageMagick (belum ada bawaan di runner)..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
+
           echo "🔍 Cek ImageMagick tersedia:"
           which convert || echo "❌ convert TIDAK ditemukan di runner!"
           convert -version || true
