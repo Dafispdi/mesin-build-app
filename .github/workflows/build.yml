@@ -98,6 +98,11 @@ jobs:
           for dir in $RES_DIR/mipmap-*/; do
             if [ -d "$dir" ]; then
               echo "➡️ Menimpa icon di: $dir"
+
+              # Hapus versi .webp lama (kalau ada) biar tidak bentrok "Duplicate resources"
+              # dengan .png yang kita taruh (Android gak boleh 2 format buat 1 nama resource)
+              rm -f "${dir}ic_launcher.webp" "${dir}ic_launcher_round.webp"
+
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png"
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png"
               echo "   Hasil ic_launcher.png:"
