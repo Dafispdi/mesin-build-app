@@ -19,6 +19,10 @@ on:
         description: 'URL Custom Icon (Opsional)'
         required: false
         type: string
+      color_hex:
+        description: 'Warna Tema Aplikasi, format HEX misal #FF5733 (Opsional)'
+        required: false
+        type: string
 
 jobs:
   build-app:
@@ -52,6 +56,21 @@ jobs:
           
           # Hapus file zip mentahan biar hemat tempat
           rm source.zip
+
+      - name: Bersihkan Cache & Build Lama
+        working-directory: ./target_repo
+        run: |
+          echo "🧹 Membersihkan sisa cache/build lama dari ZIP (kalau ada)..."
+
+          if [ "${{ inputs.framework }}" == "flutter" ]; then
+            rm -rf .dart_tool build android/.gradle android/app/build \
+                   android/.idea ios/Pods ios/.symlinks ios/Flutter/Flutter.framework \
+                   .flutter-plugins .flutter-plugins-dependencies .packages
+            echo "✅ Cache Flutter dibersihkan (.dart_tool, build/, android/.gradle, ios/Pods, dll)."
+          else
+            rm -rf build app/build .gradle .idea out
+            echo "✅ Cache Kotlin/Gradle dibersihkan (build/, .gradle/, .idea/, dll)."
+          fi
 
       # DIPINDAH KE SINI: harus setelah source code diekstrak,
       # biar folder res/mipmap-* sudah ada dan bisa ditimpa iconnya
@@ -120,6 +139,41 @@ jobs:
           fi
 
           echo "✅ Custom Icon berhasil dipasang!"
+
+      - name: Ganti Warna Tema Aplikasi
+        if: ${{ inputs.color_hex != '' }}
+        working-directory: ./target_repo
+        run: |
+          # Normalisasi format: buang '#' kalau ada, pastikan uppercase, tambah alpha FF di depan
+          RAW_HEX=$(echo "${{ inputs.color_hex }}" | tr -d '#' | tr 'a-f' 'A-F')
+          HEX8="FF${RAW_HEX}"
+          echo "🎨 Warna target: #${RAW_HEX} (ARGB: ${HEX8})"
+
+          if [ "${{ inputs.framework }}" == "kotlin" ]; then
+            COLORS_FILE="app/src/main/res/values/colors.xml"
+            if [ -f "$COLORS_FILE" ]; then
+              echo "🔍 Menimpa colorPrimary/colorPrimaryDark/colorAccent di $COLORS_FILE..."
+              for NAME in colorPrimary colorPrimaryDark colorAccent purple_500 purple_700 teal_200 teal_700; do
+                sed -i "s|<color name=\"$NAME\">#[0-9A-Fa-f]*</color>|<color name=\"$NAME\">#${RAW_HEX}</color>|g" "$COLORS_FILE"
+              done
+              echo "✅ Warna tema Android berhasil diganti."
+              cat "$COLORS_FILE"
+            else
+              echo "⚠️ File colors.xml tidak ditemukan di $COLORS_FILE, lewati penggantian warna."
+            fi
+          else
+            echo "⚠️ CATATAN: Flutter mendefinisikan warna lewat kode Dart (bukan file resource statis),"
+            echo "    jadi penggantian ini bersifat BEST-EFFORT dan mungkin tidak menjangkau semua kasus."
+            MAIN_FILE="lib/main.dart"
+            if [ -f "$MAIN_FILE" ]; then
+              # Coba timpa pola paling umum: primaryColor / seedColor Color(0xFF......)
+              sed -i -E "s/(primaryColor:\s*Color\(0x)[0-9A-Fa-f]{8}(\))/\1${HEX8}\2/g" "$MAIN_FILE"
+              sed -i -E "s/(seedColor:\s*Color\(0x)[0-9A-Fa-f]{8}(\))/\1${HEX8}\2/g" "$MAIN_FILE"
+              echo "✅ Percobaan penggantian warna di $MAIN_FILE selesai (cek hasil build untuk memastikan)."
+            else
+              echo "⚠️ lib/main.dart tidak ditemukan, lewati penggantian warna."
+            fi
+          fi
           
       - name: Pengecekan Integritas & Auto-Fix File
         working-directory: ./target_repo
