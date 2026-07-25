@@ -19,8 +19,24 @@ on:
         description: 'URL Custom Icon (Opsional)'
         required: false
         type: string
-      color_hex:
-        description: 'Warna Tema Aplikasi, format HEX misal #FF5733 (Opsional)'
+      mode:
+        description: 'build = compile jadi APK, modify = cuma kustomisasi source lalu dikemas ZIP'
+        required: false
+        type: choice
+        default: build
+        options:
+          - build
+          - modify
+      new_app_name:
+        description: 'Nama Aplikasi Baru (Opsional)'
+        required: false
+        type: string
+      new_package_name:
+        description: 'Package Name / Application ID Baru, misal com.contoh.app (Opsional)'
+        required: false
+        type: string
+      new_app_version:
+        description: 'Versi Aplikasi Baru, misal 1.2.0 (Opsional)'
         required: false
         type: string
 
@@ -155,41 +171,125 @@ jobs:
 
           echo "✅ Custom Icon berhasil dipasang!"
 
-      - name: Ganti Warna Tema Aplikasi
-        if: ${{ inputs.color_hex != '' }}
+      - name: Ganti Nama Aplikasi, Package Name & Versi
+        if: ${{ inputs.new_app_name != '' || inputs.new_package_name != '' || inputs.new_app_version != '' }}
         working-directory: ./target_repo
         run: |
-          # Normalisasi format: buang '#' kalau ada, pastikan uppercase, tambah alpha FF di depan
-          RAW_HEX=$(echo "${{ inputs.color_hex }}" | tr -d '#' | tr 'a-f' 'A-F')
-          HEX8="FF${RAW_HEX}"
-          echo "🎨 Warna target: #${RAW_HEX} (ARGB: ${HEX8})"
+          echo "🔧 Menerapkan kustomisasi source code..."
 
           if [ "${{ inputs.framework }}" == "kotlin" ]; then
-            COLORS_FILE="app/src/main/res/values/colors.xml"
-            if [ -f "$COLORS_FILE" ]; then
-              echo "🔍 Menimpa colorPrimary/colorPrimaryDark/colorAccent di $COLORS_FILE..."
-              for NAME in colorPrimary colorPrimaryDark colorAccent purple_500 purple_700 teal_200 teal_700; do
-                sed -i "s|<color name=\"$NAME\">#[0-9A-Fa-f]*</color>|<color name=\"$NAME\">#${RAW_HEX}</color>|g" "$COLORS_FILE"
-              done
-              echo "✅ Warna tema Android berhasil diganti."
-              cat "$COLORS_FILE"
-            else
-              echo "⚠️ File colors.xml tidak ditemukan di $COLORS_FILE, lewati penggantian warna."
-            fi
+            SRC_ROOT="app/src/main"
+            GRADLE_FILE="app/build.gradle"
+            [ -f "$GRADLE_FILE" ] || GRADLE_FILE="app/build.gradle.kts"
           else
-            echo "⚠️ CATATAN: Flutter mendefinisikan warna lewat kode Dart (bukan file resource statis),"
-            echo "    jadi penggantian ini bersifat BEST-EFFORT dan mungkin tidak menjangkau semua kasus."
-            MAIN_FILE="lib/main.dart"
-            if [ -f "$MAIN_FILE" ]; then
-              # Coba timpa pola paling umum: primaryColor / seedColor Color(0xFF......)
-              sed -i -E "s/(primaryColor:\s*Color\(0x)[0-9A-Fa-f]{8}(\))/\1${HEX8}\2/g" "$MAIN_FILE"
-              sed -i -E "s/(seedColor:\s*Color\(0x)[0-9A-Fa-f]{8}(\))/\1${HEX8}\2/g" "$MAIN_FILE"
-              echo "✅ Percobaan penggantian warna di $MAIN_FILE selesai (cek hasil build untuk memastikan)."
+            SRC_ROOT="android/app/src/main"
+            GRADLE_FILE="android/app/build.gradle"
+            [ -f "$GRADLE_FILE" ] || GRADLE_FILE="android/app/build.gradle.kts"
+          fi
+
+          # ---- 1. GANTI NAMA APLIKASI (display name, di strings.xml) ----
+          if [ -n "${{ inputs.new_app_name }}" ]; then
+            NEW_NAME="${{ inputs.new_app_name }}"
+            echo "📛 Mengganti nama aplikasi jadi: $NEW_NAME"
+            STRINGS_FILE="$SRC_ROOT/res/values/strings.xml"
+            if [ -f "$STRINGS_FILE" ]; then
+              sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">${NEW_NAME}</string>|g" "$STRINGS_FILE"
+              echo "✅ app_name diganti di $STRINGS_FILE"
             else
-              echo "⚠️ lib/main.dart tidak ditemukan, lewati penggantian warna."
+              echo "⚠️ $STRINGS_FILE tidak ditemukan, coba ganti android:label langsung di AndroidManifest.xml"
+              sed -i "s|android:label=\"[^\"]*\"|android:label=\"${NEW_NAME}\"|g" "$SRC_ROOT/AndroidManifest.xml" 2>/dev/null || echo "⚠️ Gagal juga di AndroidManifest.xml"
             fi
           fi
-          
+
+          # ---- 2. GANTI VERSI APLIKASI ----
+          if [ -n "${{ inputs.new_app_version }}" ]; then
+            NEW_VERSION="${{ inputs.new_app_version }}"
+            echo "🔢 Mengganti versi aplikasi jadi: $NEW_VERSION"
+            if [ "${{ inputs.framework }}" == "kotlin" ]; then
+              if [ -f "$GRADLE_FILE" ]; then
+                sed -i -E "s/versionName[[:space:]]*=?[[:space:]]*\"[^\"]*\"/versionName \"${NEW_VERSION}\"/g" "$GRADLE_FILE"
+                echo "✅ versionName diganti di $GRADLE_FILE"
+              else
+                echo "⚠️ $GRADLE_FILE tidak ditemukan, lewati ganti versi."
+              fi
+            else
+              if [ -f "pubspec.yaml" ]; then
+                # Format versi pubspec: name+buildnumber, misal 1.0.0+1.
+                # Kalau user cuma isi "1.2.3" (tanpa +buildnumber), buildnumber lama dipertahankan.
+                CURRENT_LINE=$(grep -E "^version:" pubspec.yaml || true)
+                BUILD_NUM=$(echo "$CURRENT_LINE" | grep -oE '\+[0-9]+' || echo "+1")
+                if [[ "$NEW_VERSION" == *"+"* ]]; then
+                  sed -i -E "s/^version:.*/version: ${NEW_VERSION}/" pubspec.yaml
+                else
+                  sed -i -E "s/^version:.*/version: ${NEW_VERSION}${BUILD_NUM}/" pubspec.yaml
+                fi
+                echo "✅ version diganti di pubspec.yaml"
+              else
+                echo "⚠️ pubspec.yaml tidak ditemukan, lewati ganti versi."
+              fi
+            fi
+          fi
+
+          # ---- 3. GANTI PACKAGE NAME / APPLICATION ID ----
+          if [ -n "${{ inputs.new_package_name }}" ]; then
+            NEW_PKG="${{ inputs.new_package_name }}"
+            echo "📦 Mengganti package name jadi: $NEW_PKG"
+
+            if [ ! -f "$GRADLE_FILE" ]; then
+              echo "⚠️ $GRADLE_FILE tidak ditemukan, lewati penggantian package name."
+            else
+              OLD_PKG=$(grep -oE 'applicationId[[:space:]]*=?[[:space:]]*"[^"]*"' "$GRADLE_FILE" | grep -oE '"[^"]*"' | tr -d '"' | head -1)
+              if [ -z "$OLD_PKG" ]; then
+                OLD_PKG=$(grep -oE 'namespace[[:space:]]*=?[[:space:]]*"[^"]*"' "$GRADLE_FILE" | grep -oE '"[^"]*"' | tr -d '"' | head -1)
+              fi
+
+              if [ -z "$OLD_PKG" ]; then
+                echo "⚠️ Tidak bisa deteksi package name lama dari $GRADLE_FILE, lewati penggantian package name."
+              else
+                echo "🔍 Package name lama terdeteksi: $OLD_PKG"
+
+                # a. Update applicationId & namespace di build.gradle(.kts)
+                sed -i -E "s/applicationId[[:space:]]*=?[[:space:]]*\"[^\"]*\"/applicationId \"${NEW_PKG}\"/g" "$GRADLE_FILE"
+                sed -i -E "s/namespace[[:space:]]*=?[[:space:]]*\"[^\"]*\"/namespace \"${NEW_PKG}\"/g" "$GRADLE_FILE"
+
+                # b. Update atribut package= di AndroidManifest.xml (format lama, kalau masih ada)
+                MANIFEST="$SRC_ROOT/AndroidManifest.xml"
+                [ -f "$MANIFEST" ] && sed -i "s|package=\"${OLD_PKG}\"|package=\"${NEW_PKG}\"|g" "$MANIFEST"
+
+                # c. Pindahkan folder source Kotlin/Java sesuai struktur package baru + update deklarasi "package" di tiap file
+                OLD_PATH=$(echo "$OLD_PKG" | tr '.' '/')
+                NEW_PATH=$(echo "$NEW_PKG" | tr '.' '/')
+
+                for LANG_DIR in kotlin java; do
+                  BASE_DIR="$SRC_ROOT/$LANG_DIR"
+                  if [ -d "$BASE_DIR/$OLD_PATH" ]; then
+                    echo "➡️ Memindahkan source dari $BASE_DIR/$OLD_PATH ke $BASE_DIR/$NEW_PATH"
+                    mkdir -p "$BASE_DIR/$NEW_PATH"
+                    find "$BASE_DIR/$OLD_PATH" -mindepth 1 -maxdepth 1 -exec mv {} "$BASE_DIR/$NEW_PATH/" \;
+
+                    # Bersihkan folder lama yang sudah kosong, naik terus sampai ke root LANG_DIR
+                    OLD_PARENT="$BASE_DIR/$OLD_PATH"
+                    while [ "$OLD_PARENT" != "$BASE_DIR" ] && [ -d "$OLD_PARENT" ] && [ -z "$(ls -A "$OLD_PARENT")" ]; do
+                      rmdir "$OLD_PARENT"
+                      OLD_PARENT=$(dirname "$OLD_PARENT")
+                    done
+
+                    # Update deklarasi "package ..." di semua file .kt/.java yang baru dipindah
+                    find "$BASE_DIR/$NEW_PATH" -type f \( -name "*.kt" -o -name "*.java" \) -exec sed -i "s/^package ${OLD_PKG}/package ${NEW_PKG}/" {} \;
+                    echo "✅ Source code $LANG_DIR dipindah & deklarasi package diperbarui."
+                  fi
+                done
+
+                echo "✅ Package name berhasil diganti dari $OLD_PKG ke $NEW_PKG"
+                if [ "${{ inputs.framework }}" == "flutter" ]; then
+                  echo "⚠️ CATATAN: Ini cuma mengganti Application ID Android-nya. Kode Dart (import package:xxx/...) TIDAK ikut berubah, itu package Dart terpisah (lihat 'name:' di pubspec.yaml)."
+                fi
+              fi
+            fi
+          fi
+
+          echo "✅ Kustomisasi selesai."
+
       - name: Pengecekan Integritas & Auto-Fix File
         working-directory: ./target_repo
         run: |
@@ -228,6 +328,7 @@ jobs:
 
 
       - name: Install Java 17
+        if: ${{ inputs.mode == 'build' }}
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
@@ -235,13 +336,13 @@ jobs:
 
       # --- BLOK KHUSUS FLUTTER ---
       - name: Install Mesin Flutter
-        if: ${{ inputs.framework == 'flutter' }}
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
       - name: Build Flutter APK
-        if: ${{ inputs.framework == 'flutter' }}
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         working-directory: ./target_repo
         run: |
           flutter pub get
@@ -249,7 +350,7 @@ jobs:
 
      # --- BLOK KHUSUS KOTLIN ---
       - name: Pengecekan & Auto-Fix Gradle Wrapper
-        if: ${{ inputs.framework == 'kotlin' }}
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
         run: |
           # Cek apakah file gradlew TIDAK ada
@@ -266,7 +367,7 @@ jobs:
           chmod +x ./gradlew
 
       - name: Auto-Generate Debug Keystore
-        if: ${{ inputs.framework == 'kotlin' }}
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
         run: |
           echo "🔑 Membuat file debug.keystore dadakan..."
@@ -274,13 +375,13 @@ jobs:
           echo "✅ Keystore berhasil dibuat!"
 
       - name: Build Kotlin APK
-        if: ${{ inputs.framework == 'kotlin' }}
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
         run: ./gradlew assembleDebug -Djava.awt.headless=true --no-daemon
 
-      # --- OUTPUT: AMBIL HASIL APK ---
+      # --- OUTPUT MODE BUILD: AMBIL HASIL APK ---
       - name: Simpan Hasil APK Flutter
-        if: ${{ success() && inputs.framework == 'flutter' }}
+        if: ${{ success() && inputs.mode == 'build' && inputs.framework == 'flutter' }}
         uses: actions/upload-artifact@v4
         with:
           name: Hasil-Build
@@ -288,9 +389,29 @@ jobs:
           retention-days: 5
 
       - name: Simpan Hasil APK Kotlin
-        if: ${{ success() && inputs.framework == 'kotlin' }}
+        if: ${{ success() && inputs.mode == 'build' && inputs.framework == 'kotlin' }}
         uses: actions/upload-artifact@v4
         with:
           name: Hasil-Build
           path: target_repo/app/build/outputs/apk/debug/*.apk
+          retention-days: 5
+
+      # --- OUTPUT MODE MODIFY: KEMAS SOURCE CODE HASIL KUSTOMISASI JADI ZIP ---
+      - name: Kemas Ulang Source Code Jadi ZIP
+        if: ${{ success() && inputs.mode == 'modify' }}
+        working-directory: ./target_repo
+        run: |
+          echo "📦 Mengemas source code hasil kustomisasi jadi ZIP..."
+          sudo apt-get update -qq && sudo apt-get install -y -qq zip
+          zip -qr ../hasil-modifikasi.zip .
+          cd ..
+          echo "🔍 Cek hasil ZIP:"
+          ls -la hasil-modifikasi.zip
+
+      - name: Simpan Hasil ZIP
+        if: ${{ success() && inputs.mode == 'modify' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Build
+          path: hasil-modifikasi.zip
           retention-days: 5
