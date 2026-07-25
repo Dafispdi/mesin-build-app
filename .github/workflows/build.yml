@@ -39,9 +39,22 @@ jobs:
       # INI YANG BERUBAH: Download ZIP dan Ekstrak, bukan Git Clone
       - name: Download & Extract File ZIP
         run: |
-          echo "📥 Mendownload file ZIP dari website lu..."
-          wget -q -O source.zip "${{ inputs.zip_url }}"
-          
+          echo "📥 Mendownload file ZIP dari: ${{ inputs.zip_url }}"
+          # -L wajib buat ngikutin redirect (link GitHub Release itu redirect ke CDN)
+          curl -sL -o source.zip "${{ inputs.zip_url }}"
+
+          echo "🔍 Cek hasil download..."
+          ls -la source.zip
+          FILE_TYPE=$(file -b source.zip)
+          echo "Tipe file: $FILE_TYPE"
+
+          if [[ "$FILE_TYPE" != *"Zip archive"* ]]; then
+            echo "❌ ERROR: File yang kedownload BUKAN zip asli (kemungkinan link salah / bukan direct link / private repo)."
+            echo "--- Isi 300 karakter pertama file (buat debug) ---"
+            head -c 300 source.zip
+            exit 1
+          fi
+
           echo "📦 Mengekstrak file ZIP..."
           unzip -q source.zip -d target_repo/
           
