@@ -41,7 +41,9 @@ jobs:
         run: |
           echo "📥 Mendownload file ZIP dari: ${{ inputs.zip_url }}"
           # -L wajib buat ngikutin redirect (link GitHub Release itu redirect ke CDN)
-          curl -sL -o source.zip "${{ inputs.zip_url }}"
+          # Header Authorization disertakan biar tetap bisa akses raw.githubusercontent.com
+          # kalau repo tempat file diupload itu private (gak ngaruh kalau public/link luar).
+          curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o source.zip "${{ inputs.zip_url }}"
 
           echo "🔍 Cek hasil download..."
           ls -la source.zip
@@ -92,7 +94,7 @@ jobs:
         working-directory: ./target_repo
         run: |
           echo "🎨 Mendownload custom icon..."
-          wget -q -O custom_icon.png "${{ inputs.icon_url }}"
+          curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o custom_icon.png "${{ inputs.icon_url }}"
 
           echo "🔍 Cek hasil download icon:"
           ls -la custom_icon.png
@@ -236,7 +238,6 @@ jobs:
         if: ${{ inputs.framework == 'flutter' }}
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.x'
           channel: 'stable'
 
       - name: Build Flutter APK
