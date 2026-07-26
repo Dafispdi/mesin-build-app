@@ -207,7 +207,7 @@ jobs:
             echo "🔢 Mengganti versi aplikasi jadi: $NEW_VERSION"
             if [ "${{ inputs.framework }}" == "kotlin" ]; then
               if [ -f "$GRADLE_FILE" ]; then
-                sed -i -E "s/versionName[[:space:]]*=?[[:space:]]*\"[^\"]*\"/versionName \"${NEW_VERSION}\"/g" "$GRADLE_FILE"
+                sed -i -E "s/versionName[[:space:]]*=?[[:space:]]*\"[^\"]*\"/versionName = \"${NEW_VERSION}\"/g" "$GRADLE_FILE"
                 echo "✅ versionName diganti di $GRADLE_FILE"
               else
                 echo "⚠️ $GRADLE_FILE tidak ditemukan, lewati ganti versi."
@@ -259,8 +259,10 @@ jobs:
                 echo "🔍 Package name lama terdeteksi: $OLD_PKG"
 
                 # a. Update applicationId & namespace di build.gradle(.kts)
-                sed -i -E "s/applicationId[[:space:]]*=?[[:space:]]*\"[^\"]*\"/applicationId \"${NEW_PKG}\"/g" "$GRADLE_FILE"
-                sed -i -E "s/namespace[[:space:]]*=?[[:space:]]*\"[^\"]*\"/namespace \"${NEW_PKG}\"/g" "$GRADLE_FILE"
+                # WAJIB pakai format "key = value" (dengan tanda =), soalnya build.gradle.kts (Kotlin DSL)
+                # gak bisa parse format Groovy lama "key value" (tanpa =) -> bikin syntax error pas compile.
+                sed -i -E "s/applicationId[[:space:]]*=?[[:space:]]*\"[^\"]*\"/applicationId = \"${NEW_PKG}\"/g" "$GRADLE_FILE"
+                sed -i -E "s/namespace[[:space:]]*=?[[:space:]]*\"[^\"]*\"/namespace = \"${NEW_PKG}\"/g" "$GRADLE_FILE"
 
                 # b. Update atribut package= di AndroidManifest.xml (format lama, kalau masih ada)
                 MANIFEST="$SRC_ROOT/AndroidManifest.xml"
