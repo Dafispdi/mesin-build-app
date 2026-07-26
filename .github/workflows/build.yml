@@ -214,16 +214,26 @@ jobs:
               fi
             else
               if [ -f "pubspec.yaml" ]; then
-                # Format versi pubspec: name+buildnumber, misal 1.0.0+1.
+                # Format versi pubspec WAJIB 3 angka: major.minor.patch(+buildnumber), misal 1.0.0+1.
                 # Kalau user cuma isi "1.2.3" (tanpa +buildnumber), buildnumber lama dipertahankan.
                 CURRENT_LINE=$(grep -E "^version:" pubspec.yaml || true)
-                BUILD_NUM=$(echo "$CURRENT_LINE" | grep -oE '\+[0-9]+' || echo "+1")
+                OLD_BUILD_NUM=$(echo "$CURRENT_LINE" | grep -oE '\+[0-9]+' || echo "+1")
+
+                VERSION_PART="${NEW_VERSION%%+*}"
                 if [[ "$NEW_VERSION" == *"+"* ]]; then
-                  sed -i -E "s/^version:.*/version: ${NEW_VERSION}/" pubspec.yaml
+                  BUILD_PART="+${NEW_VERSION#*+}"
                 else
-                  sed -i -E "s/^version:.*/version: ${NEW_VERSION}${BUILD_NUM}/" pubspec.yaml
+                  BUILD_PART="$OLD_BUILD_NUM"
                 fi
-                echo "✅ version diganti di pubspec.yaml"
+
+                # Pad otomatis ke 3 komponen (major.minor.patch), soalnya pubspec.yaml
+                # nolak versi yang cuma "2.0" atau "2" (harus "2.0.0").
+                IFS='.' read -ra VPARTS <<< "$VERSION_PART"
+                while [ ${#VPARTS[@]} -lt 3 ]; do VPARTS+=("0"); done
+                VERSION_PADDED="${VPARTS[0]}.${VPARTS[1]}.${VPARTS[2]}"
+
+                sed -i -E "s/^version:.*/version: ${VERSION_PADDED}${BUILD_PART}/" pubspec.yaml
+                echo "✅ version diganti di pubspec.yaml -> ${VERSION_PADDED}${BUILD_PART}"
               else
                 echo "⚠️ pubspec.yaml tidak ditemukan, lewati ganti versi."
               fi
