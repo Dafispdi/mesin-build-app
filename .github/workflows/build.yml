@@ -358,6 +358,7 @@ jobs:
         working-directory: ./target_repo
         run: |
           flutter pub get
+          flutter pub upgrade font_awesome_flutter --major-versions
           flutter build apk --release
 
      # --- BLOK KHUSUS KOTLIN ---
