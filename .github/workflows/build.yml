@@ -3,7 +3,6 @@ name: Mesin Build (Flutter & Kotlin)
 on:
   workflow_dispatch:
     inputs:
-      # UBAH BAGIAN INI DARI repo_url MENJADI zip_url
       zip_url:
         description: 'Link Direct Download ZIP Source Code'
         required: true
@@ -52,13 +51,9 @@ jobs:
       - name: Buat Folder Target
         run: mkdir target_repo
 
-      # INI YANG BERUBAH: Download ZIP dan Ekstrak, bukan Git Clone
       - name: Download & Extract File ZIP
         run: |
           echo "📥 Mendownload file ZIP dari: ${{ inputs.zip_url }}"
-          # -L wajib buat ngikutin redirect (link GitHub Release itu redirect ke CDN)
-          # Header Authorization disertakan biar tetap bisa akses raw.githubusercontent.com
-          # kalau repo tempat file diupload itu private (gak ngaruh kalau public/link luar).
           curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o source.zip "${{ inputs.zip_url }}"
 
           echo "🔍 Cek hasil download..."
@@ -76,16 +71,13 @@ jobs:
           echo "📦 Mengekstrak file ZIP..."
           unzip -q source.zip -d target_repo/
           
-          # Trik agar isi folder (jika ada sub-folder hasil ekstrak) ditarik ke depan
           cd target_repo
-          # Cek kalau di dalamnya cuma ada 1 folder, pindahkan isinya keluar
           if [ $(ls -1A | wc -l) -eq 1 ] && [ -d $(ls -1A) ]; then
             mv $(ls -1A)/* ./
             mv $(ls -1A)/.* ./ 2>/dev/null || true
           fi
           cd ..
           
-          # Hapus file zip mentahan biar hemat tempat
           rm source.zip
 
       - name: Bersihkan Cache & Build Lama
@@ -103,8 +95,6 @@ jobs:
             echo "✅ Cache Kotlin/Gradle dibersihkan (build/, .gradle/, .idea/, dll)."
           fi
 
-      # DIPINDAH KE SINI: harus setelah source code diekstrak,
-      # biar folder res/mipmap-* sudah ada dan bisa ditimpa iconnya
       - name: Pasang Custom Icon
         if: ${{ inputs.icon_url != '' }}
         working-directory: ./target_repo
@@ -125,7 +115,6 @@ jobs:
           convert -version || true
 
           echo "⚙️ Memproses dan menimpa icon bawaan..."
-          # Tentukan target folder res/mipmap berdasarkan framework
           if [ "${{ inputs.framework }}" == "kotlin" ]; then
             RES_DIR="app/src/main/res"
           else
@@ -135,24 +124,15 @@ jobs:
           echo "🔍 Mengecek folder mipmap yang tersedia di $RES_DIR ..."
           ls -d $RES_DIR/mipmap-*/ 2>/dev/null || echo "⚠️ Tidak ada folder mipmap-* ditemukan!"
 
-          # PENTING: Android 8+ pakai "adaptive icon" (mipmap-anydpi-v26/ic_launcher.xml)
-          # yang me-reference vector drawable, BUKAN file PNG. Kalau folder ini dibiarkan,
-          # PNG custom yang kita timpa di bawah tidak akan pernah dipakai sistem.
-          # Solusinya: hapus definisi adaptive icon-nya, biar sistem fallback ke PNG legacy.
           if [ -d "$RES_DIR/mipmap-anydpi-v26" ]; then
             echo "🗑️ Menghapus adaptive icon (mipmap-anydpi-v26) supaya PNG custom kepakai..."
             rm -rf "$RES_DIR/mipmap-anydpi-v26"
           fi
 
-          # Timpa semua ukuran icon dengan custom icon (resize otomatis jadi 192x192)
           for dir in $RES_DIR/mipmap-*/; do
             if [ -d "$dir" ]; then
               echo "➡️ Menimpa icon di: $dir"
-
-              # Hapus versi .webp lama (kalau ada) biar tidak bentrok "Duplicate resources"
-              # dengan .png yang kita taruh (Android gak boleh 2 format buat 1 nama resource)
               rm -f "${dir}ic_launcher.webp" "${dir}ic_launcher_round.webp"
-
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png"
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png"
               echo "   Hasil ic_launcher.png:"
@@ -160,8 +140,6 @@ jobs:
             fi
           done
 
-          # Kalau ternyata TIDAK ADA folder mipmap-* sama sekali (kasus jarang),
-          # buat folder mipmap-xxhdpi manual biar tetap ada icon-nya
           if ! ls -d $RES_DIR/mipmap-*/ >/dev/null 2>&1; then
             echo "⚠️ Tidak ada folder mipmap sama sekali, membuat mipmap-xxhdpi manual..."
             mkdir -p "$RES_DIR/mipmap-xxhdpi"
@@ -187,61 +165,32 @@ jobs:
             [ -f "$GRADLE_FILE" ] || GRADLE_FILE="android/app/build.gradle.kts"
           fi
 
-          # ---- 1. GANTI NAMA APLIKASI (display name, di strings.xml) ----
-          if [ -n "${{ inputs.new_app_name }}" ]; then
+          if [ "${{ inputs.new_app_name }}" != "" ]; then
             NEW_NAME="${{ inputs.new_app_name }}"
-            echo "📛 Mengganti nama aplikasi jadi: $NEW_NAME"
-            STRINGS_FILE="$SRC_ROOT/res/values/strings.xml"
-            if [ -f "$STRINGS_FILE" ]; then
-              sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">${NEW_NAME}</string>|g" "$STRINGS_FILE"
-              echo "✅ app_name diganti di $STRINGS_FILE"
+            echo "📝 Mengganti nama aplikasi jadi: $NEW_NAME"
+
+            if [ ! -f "$SRC_ROOT/AndroidManifest.xml" ]; then
+              echo "⚠️ AndroidManifest.xml tidak ditemukan, lewati penggantian nama aplikasi."
             else
-              echo "⚠️ $STRINGS_FILE tidak ditemukan, coba ganti android:label langsung di AndroidManifest.xml"
-              sed -i "s|android:label=\"[^\"]*\"|android:label=\"${NEW_NAME}\"|g" "$SRC_ROOT/AndroidManifest.xml" 2>/dev/null || echo "⚠️ Gagal juga di AndroidManifest.xml"
+              sed -i "s/android:label=\"[^\"]*\"/android:label=\"${NEW_NAME}\"/g" "$SRC_ROOT/AndroidManifest.xml"
+              echo "✅ Nama aplikasi berhasil diganti di AndroidManifest.xml"
             fi
           fi
 
-          # ---- 2. GANTI VERSI APLIKASI ----
-          if [ -n "${{ inputs.new_app_version }}" ]; then
-            NEW_VERSION="${{ inputs.new_app_version }}"
-            echo "🔢 Mengganti versi aplikasi jadi: $NEW_VERSION"
-            if [ "${{ inputs.framework }}" == "kotlin" ]; then
-              if [ -f "$GRADLE_FILE" ]; then
-                sed -i -E "s/versionName[[:space:]]*=?[[:space:]]*\"[^\"]*\"/versionName = \"${NEW_VERSION}\"/g" "$GRADLE_FILE"
-                echo "✅ versionName diganti di $GRADLE_FILE"
-              else
-                echo "⚠️ $GRADLE_FILE tidak ditemukan, lewati ganti versi."
-              fi
+          if [ "${{ inputs.new_app_version }}" != "" ]; then
+            NEW_VER="${{ inputs.new_app_version }}"
+            echo "📝 Mengganti versi aplikasi jadi: $NEW_VER"
+
+            if [ ! -f "$GRADLE_FILE" ]; then
+              echo "⚠️ $GRADLE_FILE tidak ditemukan, lewati penggantian versi."
             else
-              if [ -f "pubspec.yaml" ]; then
-                # Format versi pubspec WAJIB 3 angka: major.minor.patch(+buildnumber), misal 1.0.0+1.
-                # Kalau user cuma isi "1.2.3" (tanpa +buildnumber), buildnumber lama dipertahankan.
-                CURRENT_LINE=$(grep -E "^version:" pubspec.yaml || true)
-                OLD_BUILD_NUM=$(echo "$CURRENT_LINE" | grep -oE '\+[0-9]+' || echo "+1")
-
-                VERSION_PART="${NEW_VERSION%%+*}"
-                if [[ "$NEW_VERSION" == *"+"* ]]; then
-                  BUILD_PART="+${NEW_VERSION#*+}"
-                else
-                  BUILD_PART="$OLD_BUILD_NUM"
-                fi
-
-                # Pad otomatis ke 3 komponen (major.minor.patch), soalnya pubspec.yaml
-                # nolak versi yang cuma "2.0" atau "2" (harus "2.0.0").
-                IFS='.' read -ra VPARTS <<< "$VERSION_PART"
-                while [ ${#VPARTS[@]} -lt 3 ]; do VPARTS+=("0"); done
-                VERSION_PADDED="${VPARTS[0]}.${VPARTS[1]}.${VPARTS[2]}"
-
-                sed -i -E "s/^version:.*/version: ${VERSION_PADDED}${BUILD_PART}/" pubspec.yaml
-                echo "✅ version diganti di pubspec.yaml -> ${VERSION_PADDED}${BUILD_PART}"
-              else
-                echo "⚠️ pubspec.yaml tidak ditemukan, lewati ganti versi."
-              fi
+              sed -i "s/versionName[[:space:]]*=?[[:space:]]*\"[^\"]*\"/versionName = \"${NEW_VER}\"/g" "$GRADLE_FILE"
+              sed -i "s/versionName[[:space:]]*=?[[:space:]]*'[^']*'/versionName = \"${NEW_VER}\"/g" "$GRADLE_FILE"
+              echo "✅ Versi aplikasi berhasil diganti."
             fi
           fi
 
-          # ---- 3. GANTI PACKAGE NAME / APPLICATION ID ----
-          if [ -n "${{ inputs.new_package_name }}" ]; then
+          if [ "${{ inputs.new_package_name }}" != "" ]; then
             NEW_PKG="${{ inputs.new_package_name }}"
             echo "📦 Mengganti package name jadi: $NEW_PKG"
 
@@ -258,17 +207,12 @@ jobs:
               else
                 echo "🔍 Package name lama terdeteksi: $OLD_PKG"
 
-                # a. Update applicationId & namespace di build.gradle(.kts)
-                # WAJIB pakai format "key = value" (dengan tanda =), soalnya build.gradle.kts (Kotlin DSL)
-                # gak bisa parse format Groovy lama "key value" (tanpa =) -> bikin syntax error pas compile.
                 sed -i -E "s/applicationId[[:space:]]*=?[[:space:]]*\"[^\"]*\"/applicationId = \"${NEW_PKG}\"/g" "$GRADLE_FILE"
                 sed -i -E "s/namespace[[:space:]]*=?[[:space:]]*\"[^\"]*\"/namespace = \"${NEW_PKG}\"/g" "$GRADLE_FILE"
 
-                # b. Update atribut package= di AndroidManifest.xml (format lama, kalau masih ada)
                 MANIFEST="$SRC_ROOT/AndroidManifest.xml"
                 [ -f "$MANIFEST" ] && sed -i "s|package=\"${OLD_PKG}\"|package=\"${NEW_PKG}\"|g" "$MANIFEST"
 
-                # c. Pindahkan folder source Kotlin/Java sesuai struktur package baru + update deklarasi "package" di tiap file
                 OLD_PATH=$(echo "$OLD_PKG" | tr '.' '/')
                 NEW_PATH=$(echo "$NEW_PKG" | tr '.' '/')
 
@@ -279,14 +223,12 @@ jobs:
                     mkdir -p "$BASE_DIR/$NEW_PATH"
                     find "$BASE_DIR/$OLD_PATH" -mindepth 1 -maxdepth 1 -exec mv {} "$BASE_DIR/$NEW_PATH/" \;
 
-                    # Bersihkan folder lama yang sudah kosong, naik terus sampai ke root LANG_DIR
                     OLD_PARENT="$BASE_DIR/$OLD_PATH"
                     while [ "$OLD_PARENT" != "$BASE_DIR" ] && [ -d "$OLD_PARENT" ] && [ -z "$(ls -A "$OLD_PARENT")" ]; do
                       rmdir "$OLD_PARENT"
                       OLD_PARENT=$(dirname "$OLD_PARENT")
                     done
 
-                    # Update deklarasi "package ..." di semua file .kt/.java yang baru dipindah
                     find "$BASE_DIR/$NEW_PATH" -type f \( -name "*.kt" -o -name "*.java" \) -exec sed -i "s/^package ${OLD_PKG}/package ${NEW_PKG}/" {} \;
                     echo "✅ Source code $LANG_DIR dipindah & deklarasi package diperbarui."
                   fi
@@ -307,12 +249,10 @@ jobs:
         run: |
           echo "🔍 Memulai pengecekan struktur repository..."
 
-          # --- CEK UNTUK KOTLIN ---
           if [ "${{ inputs.framework }}" == "kotlin" ]; then
-            # 1. Cek Fatal Error: Apakah build.gradle ada?
             if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
               echo "❌ ERROR: Repository tidak valid. File build.gradle(.kts) utama tidak ditemukan!"
-              exit 1 # Membatalkan build seketika (Status Failed)
+              exit 1
             fi
 
             if [ ! -f "app/build.gradle" ] && [ ! -f "app/build.gradle.kts" ]; then
@@ -320,16 +260,13 @@ jobs:
               exit 1
             fi
 
-            # 2. Auto-Fix: Buat local.properties jika hilang (Sering bikin error di Android)
             if [ ! -f "local.properties" ]; then
               echo "🔧 Memperbaiki: Membuat file local.properties otomatis..."
               echo "sdk.dir=$ANDROID_HOME" > local.properties
             fi
           fi
 
-          # --- CEK UNTUK FLUTTER ---
           if [ "${{ inputs.framework }}" == "flutter" ]; then
-            # 1. Cek Fatal Error: Apakah pubspec.yaml ada?
             if [ ! -f "pubspec.yaml" ]; then
               echo "❌ ERROR: Repository bukan project Flutter. File pubspec.yaml tidak ditemukan!"
               exit 1
@@ -338,6 +275,76 @@ jobs:
 
           echo "✅ Pengecekan selesai. Struktur aman!"
 
+      # ============================================================================
+      # 🆕 AUTO-FIX FAICONDATA STEP - INJECTED SEBELUM BUILD
+      # ============================================================================
+      - name: 🔧 AUTO-FIX FaIconData Incompatibility (Flutter 3.44.8+)
+        if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🔧 Memulai AUTO-FIX untuk FaIconData incompatibility..."
+          echo ""
+
+          # Cek apakah font_awesome_flutter digunakan
+          if ! grep -q "font_awesome_flutter" pubspec.yaml; then
+            echo "⏭️  font_awesome_flutter tidak ditemukan, skip auto-fix."
+            exit 0
+          fi
+
+          echo "✅ font_awesome_flutter terdeteksi, scanning untuk Icon(FontAwesomeIcons.*) pattern..."
+          echo ""
+
+          # Step 1: Find files dengan Icon(FontAwesomeIcons.
+          FOUND_ERRORS=$(grep -r "Icon(FontAwesomeIcons\." lib/ --include="*.dart" 2>/dev/null | wc -l)
+
+          if [ "$FOUND_ERRORS" -eq 0 ]; then
+            echo "✅ Tidak ada Icon(FontAwesomeIcons.*) pattern ditemukan."
+            exit 0
+          fi
+
+          echo "⚠️  Menemukan $FOUND_ERRORS baris dengan Icon(FontAwesomeIcons.*)"
+          echo ""
+
+          # Step 2: Add imports to all files
+          echo "📝 Menambahkan import font_awesome_flutter ke file yang perlu..."
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              if ! grep -q "import.*font_awesome_flutter.*font_awesome_flutter" "$file"; then
+                first_import_line=$(grep -n "^import" "$file" | head -1 | cut -d: -f1)
+                if [ -n "$first_import_line" ]; then
+                  sed -i "${first_import_line}i import 'package:font_awesome_flutter/font_awesome_flutter.dart';" "$file"
+                else
+                  sed -i "1i import 'package:font_awesome_flutter/font_awesome_flutter.dart';\n" "$file"
+                fi
+                echo "  ✅ $file"
+              fi
+            fi
+          done < <(grep -r "Icon(FontAwesomeIcons\." lib/ --include="*.dart" 2>/dev/null | cut -d: -f1 | sort -u)
+
+          echo ""
+
+          # Step 3: Replace Icon(FontAwesomeIcons. dengan FaIcon(FontAwesomeIcons.
+          echo "📝 Mengganti Icon(FontAwesomeIcons. → FaIcon(FontAwesomeIcons...."
+          find lib/ -name "*.dart" -type f -exec sed -i 's/Icon(FontAwesomeIcons\./FaIcon(FontAwesomeIcons\./g' {} +
+          echo "✅ Replacement selesai"
+          echo ""
+
+          # Step 4: Verify
+          echo "📊 Verifikasi hasil..."
+          remaining=$(grep -r "Icon(FontAwesomeIcons\." lib/ --include="*.dart" 2>/dev/null | wc -l)
+          faicon_count=$(grep -r "FaIcon(FontAwesomeIcons\." lib/ --include="*.dart" 2>/dev/null | wc -l)
+
+          echo "   • Icon(FontAwesomeIcons) tersisa: $remaining"
+          echo "   • FaIcon(FontAwesomeIcons) sekarang: $faicon_count ✅"
+          echo ""
+
+          if [ "$remaining" -eq 0 ]; then
+            echo "✅ AUTO-FIX BERHASIL! Siap untuk flutter build."
+          else
+            echo "⚠️  $remaining baris masih berisi Icon(FontAwesomeIcons (mungkin format berbeda)"
+            echo "   Coba manual fix atau review error build untuk detailnya."
+          fi
+          echo ""
 
       - name: Install Java 17
         if: ${{ inputs.mode == 'build' }}
@@ -346,7 +353,6 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # --- BLOK KHUSUS FLUTTER ---
       - name: Install Mesin Flutter
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         uses: subosito/flutter-action@v2
@@ -360,22 +366,18 @@ jobs:
           flutter pub get
           flutter build apk --release
 
-     # --- BLOK KHUSUS KOTLIN ---
       - name: Pengecekan & Auto-Fix Gradle Wrapper
         if: ${{ inputs.mode == 'build' && inputs.framework == 'kotlin' }}
         working-directory: ./target_repo
         run: |
-          # Cek apakah file gradlew TIDAK ada
           if [ ! -f "./gradlew" ]; then
             echo "⚠️ File gradlew tidak ditemukan di repository!"
             echo "🔧 Meng-generate ulang Gradle Wrapper secara otomatis..."
-            # Memanggil mesin Gradle global milik Ubuntu untuk membuatkan file wrapper
             gradle wrapper
           else
             echo "✅ File gradlew ditemukan."
           fi
           
-          # Pastikan file bisa dieksekusi
           chmod +x ./gradlew
 
       - name: Auto-Generate Debug Keystore
@@ -391,7 +393,6 @@ jobs:
         working-directory: ./target_repo
         run: ./gradlew assembleDebug -Djava.awt.headless=true --no-daemon
 
-      # --- OUTPUT MODE BUILD: AMBIL HASIL APK ---
       - name: Simpan Hasil APK Flutter
         if: ${{ success() && inputs.mode == 'build' && inputs.framework == 'flutter' }}
         uses: actions/upload-artifact@v4
@@ -408,7 +409,6 @@ jobs:
           path: target_repo/app/build/outputs/apk/debug/*.apk
           retention-days: 5
 
-      # --- OUTPUT MODE MODIFY: KEMAS SOURCE CODE HASIL KUSTOMISASI JADI ZIP ---
       - name: Kemas Ulang Source Code Jadi ZIP
         if: ${{ success() && inputs.mode == 'modify' }}
         working-directory: ./target_repo
