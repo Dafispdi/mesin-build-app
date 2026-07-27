@@ -351,7 +351,9 @@ jobs:
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.6' # Pin ke versi 3.19.6 biar error IconData lenyap
           channel: 'stable'
+
 
       - name: Build Flutter APK
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
