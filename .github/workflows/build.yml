@@ -337,55 +337,7 @@ jobs:
           fi
 
           echo "✅ Pengecekan selesai. Struktur aman!"
-          
-      - name: Flutter Auto-Fix (Perbaiki Common Compilation Errors)
-        if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
-        working-directory: ./target_repo
-        run: |
-          echo "🔧 Menjalankan Flutter Auto-Fix untuk mengatasi common compilation errors..."
-          
-          # 1. Bersihkan cache secara LENGKAP
-          echo "🧹 Membersihkan cache Flutter secara menyeluruh..."
-          rm -rf .dart_tool build android/.gradle android/app/build \
-                 .flutter-plugins .flutter-plugins-dependencies .packages
-          
-          # 2. Deteksi & perbaiki: Missing FontAwesomeIcons import
-          echo "📦 Memeriksa FontAwesomeIcons import..."
-          FILES_WITH_FA=$(grep -r "FontAwesomeIcons\." lib 2>/dev/null | cut -d: -f1 | sort -u || true)
-          for FILE in $FILES_WITH_FA; do
-            if ! grep -q "import.*font_awesome_flutter" "$FILE"; then
-              echo "  ⚠️  Menambahkan import FontAwesomeIcons ke: $(basename $FILE)"
-              # Insert import setelah baris import pertama
-              sed -i "/^import 'package:flutter/a import 'package:font_awesome_flutter/font_awesome_flutter.dart';" "$FILE"
-            fi
-          done
-          
-          # 3. Deteksi & perbaiki: FaIcon harus jadi Icon
-          echo "📦 Memeriksa penggunaan FaIcon..."
-          FILES_WITH_FAICON=$(grep -r "FaIcon(" lib 2>/dev/null | cut -d: -f1 | sort -u || true)
-          for FILE in $FILES_WITH_FAICON; do
-            echo "  ⚠️  Mengubah FaIcon -> Icon di: $(basename $FILE)"
-            sed -i 's/FaIcon(/Icon(/g' "$FILE"
-          done
-          
-          # 4. Deteksi & perbaiki: FaIconData type mismatch
-          echo "📦 Memeriksa type mismatch (FaIconData vs IconData)..."
-          FILES_WITH_TYPE=$(grep -r "FaIconData" lib 2>/dev/null | cut -d: -f1 | sort -u || true)
-          for FILE in $FILES_WITH_TYPE; do
-            echo "  ⚠️  Memperbaiki type mismatch di: $(basename $FILE)"
-            sed -i 's/FaIconData?/IconData/g' "$FILE"
-            sed -i 's/FaIconData\b/IconData/g' "$FILE"
-          done
-          
-          # 5. Validasi pubspec.yaml font_awesome_flutter
-          echo "📝 Validasi font_awesome_flutter version..."
-          if grep -q "font_awesome_flutter.*\^11" pubspec.yaml; then
-            echo "  ⚠️  Downgrading font_awesome_flutter dari v11 ke v10.12.0 (stable)..."
-            sed -i 's/font_awesome_flutter: \^11[^[:space:]]*/font_awesome_flutter: ^10.12.0/g' pubspec.yaml
-            sed -i 's/font_awesome_flutter: 11[^[:space:]]*/font_awesome_flutter: 10.12.0/g' pubspec.yaml
-          fi
-          
-          echo "✅ Flutter Auto-Fix selesai!"
+
 
       - name: Install Java 17
         if: ${{ inputs.mode == 'build' }}
