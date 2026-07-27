@@ -353,14 +353,19 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build Flutter APK
+        - name: Build Flutter APK
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         working-directory: ./target_repo
         run: |
-          rm -f pubspec.lock
-          flutter pub upgrade
+        rm -f pubspec.lock
+          # Auto-Fix IconData (Paksa update font_awesome_flutter jika ada)
+          if grep -q "font_awesome_flutter" pubspec.yaml; then
+            echo "🔧 Memperbaiki font_awesome_flutter ke versi terbaru (Fix IconData)..."
+          flutter pub add font_awesome_flutter
+          fi
           flutter pub get
           flutter build apk --release
+
 
      # --- BLOK KHUSUS KOTLIN ---
       - name: Pengecekan & Auto-Fix Gradle Wrapper
