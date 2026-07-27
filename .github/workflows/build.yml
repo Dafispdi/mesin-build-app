@@ -353,7 +353,7 @@ jobs:
         with:
           channel: 'stable'
 
-        - name: Build Flutter APK
+      - name: Build Flutter APK
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         working-directory: ./target_repo
         run: |
