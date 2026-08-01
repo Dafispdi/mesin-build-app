@@ -307,6 +307,25 @@ jobs:
         run: |
           echo "🔍 Memulai pengecekan struktur repository..."
 
+          # --- 🚀 AUTO-FIX ANTI ERROR JAVA HEAP SPACE (RAM) ---
+          echo "🔧 Menyuntikkan konfigurasi memori tinggi ke gradle.properties..."
+          if [ "${{ inputs.framework }}" == "flutter" ]; then
+            GRADLE_PROP_PATH="android/gradle.properties"
+            mkdir -p android
+          else
+            GRADLE_PROP_PATH="gradle.properties"
+          fi
+          
+          # Hapus settingan jvmargs lama kalau ada biar gak bentrok
+          sed -i '/org.gradle.jvmargs/d' "$GRADLE_PROP_PATH" 2>/dev/null || true
+          
+          # Paksa Gradle pakai RAM 4GB biar gak muntah (Mencegah Java Heap Space)
+          echo "org.gradle.jvmargs=-Xmx4G -Dfile.encoding=UTF-8 -XX:+UseParallelGC" >> "$GRADLE_PROP_PATH"
+          echo "android.useAndroidX=true" >> "$GRADLE_PROP_PATH"
+          echo "android.enableJetifier=true" >> "$GRADLE_PROP_PATH"
+          echo "✅ Injeksi memori berhasil diterapkan di $GRADLE_PROP_PATH!"
+          # ----------------------------------------------------
+
           # --- CEK UNTUK KOTLIN ---
           if [ "${{ inputs.framework }}" == "kotlin" ]; then
             # 1. Cek Fatal Error: Apakah build.gradle ada?
