@@ -149,9 +149,11 @@ jobs:
             if [ -d "$dir" ]; then
               echo "➡️ Menimpa icon di: $dir"
 
-              # Hapus versi .webp lama (kalau ada) biar tidak bentrok "Duplicate resources"
+              # Hapus versi lama (.webp, .jpg, .jpeg) biar tidak bentrok "Duplicate resources"
               # dengan .png yang kita taruh (Android gak boleh 2 format buat 1 nama resource)
               rm -f "${dir}ic_launcher.webp" "${dir}ic_launcher_round.webp"
+              rm -f "${dir}ic_launcher.jpg" "${dir}ic_launcher_round.jpg"
+              rm -f "${dir}ic_launcher.jpeg" "${dir}ic_launcher_round.jpeg"
 
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher.png"
               convert custom_icon.png -resize 192x192 "${dir}ic_launcher_round.png"
