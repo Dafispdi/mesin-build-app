@@ -357,6 +357,20 @@ jobs:
         if: ${{ inputs.mode == 'build' && inputs.framework == 'flutter' }}
         working-directory: ./target_repo
         run: |
+          # --- 🔧 AUTO-FIX: FONT AWESOME FLUTTER (IconData Error) ---
+          # Mem-patch Flutter SDK di mesin runner untuk melonggarkan aturan 'final class IconData'.
+          # Ini memperbaiki error font_awesome_flutter versi lama yang bentrok dengan Flutter terbaru
+          # secara aman tanpa menyentuh atau merusak base code milik user!
+          if grep -q "font_awesome_flutter" pubspec.yaml 2>/dev/null; then
+            ICON_DATA_FILE="$FLUTTER_ROOT/packages/flutter/lib/src/widgets/icon_data.dart"
+            if [ -f "$ICON_DATA_FILE" ] && grep -q "final class IconData" "$ICON_DATA_FILE"; then
+              echo "🔧 Auto-Fix: Menghapus batasan 'final' pada class IconData di Flutter SDK..."
+              sed -i 's/final class IconData/class IconData/g' "$ICON_DATA_FILE"
+              echo "✅ Patch SDK berhasil diterapkan! Error font_awesome lama teratasi."
+            fi
+          fi
+          # ----------------------------------------------------------
+
           rm -f pubspec.lock
           flutter pub upgrade
           flutter pub get
