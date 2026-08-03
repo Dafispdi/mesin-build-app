@@ -1,5 +1,10 @@
 name: Mesin Build (Flutter & Kotlin)
 
+new_panel_url:
+  description: 'URL Pterodactyl Baru beserta port (Opsional)'
+  required: false
+  type: string
+
 on:
   workflow_dispatch:
     inputs:
@@ -303,6 +308,26 @@ jobs:
           fi
 
           echo "✅ Kustomisasi selesai."
+      
+      - name: Ganti URL External Pterodactyl
+        if: ${{ inputs.new_panel_url != '' }}
+        working-directory: ./target_repo
+        run: |
+          echo "🔗 Menerapkan URL Panel Pterodactyl yang baru..."
+          NEW_URL="${{ inputs.new_panel_url }}"
+          
+          # Ekstrak cuma bagian domain dan port dari input (misal: http://panel.com:11933 -> panel.com:11933)
+          DOMAIN_PORT=$(echo "$NEW_URL" | sed -E 's|^https?://||')
+
+          echo "Domain & Port Target: $DOMAIN_PORT"
+
+          # 1. Cari file .dart / .js dan replace URL http/https yang berakhiran PORT spesifik Pterodactyl
+          find . -type f \( -name "*.dart" -o -name "*.js" \) -exec sed -i -E 's|https?://[a-zA-Z0-9.-]+:[0-9]+|http://'"$DOMAIN_PORT"'|g' {} +
+          
+          # 2. Cari file .dart / .js dan replace URL websocket (ws/wss) yang berakhiran PORT spesifik Pterodactyl
+          find . -type f \( -name "*.dart" -o -name "*.js" \) -exec sed -i -E 's|wss?://[a-zA-Z0-9.-]+:[0-9]+|ws://'"$DOMAIN_PORT"'|g' {} +
+
+          echo "✅ Semua konfigurasi URL backend Pterodactyl bawaan berhasil di-replace dengan aman!"
 
       - name: Pengecekan Integritas & Auto-Fix File
         working-directory: ./target_repo
