@@ -1,13 +1,12 @@
 name: Mesin Build (Flutter & Kotlin)
 
-new_panel_url:
-  description: 'URL Pterodactyl Baru beserta port (Opsional)'
-  required: false
-  type: string
-
 on:
   workflow_dispatch:
     inputs:
+      new_panel_url:
+        description: 'URL Pterodactyl Baru beserta port (Opsional)'
+        required: false
+        type: string
       # UBAH BAGIAN INI DARI repo_url MENJADI zip_url
       zip_url:
         description: 'Link Direct Download ZIP Source Code'
