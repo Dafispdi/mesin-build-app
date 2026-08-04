@@ -416,8 +416,6 @@ jobs:
           fi
           # ----------------------------------------------------------
 
-          rm -f pubspec.lock
-          flutter pub upgrade
           flutter pub get
           flutter build apk --release
 
